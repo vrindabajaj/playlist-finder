@@ -37,4 +37,4 @@ const getPlaylists = async (song) => {
     return response.data.playlists.items;
 };
 
-module.exports = { getPlaylists, getAccessToken };
+module.exports = { getPlaylists };
