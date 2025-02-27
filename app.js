@@ -1,5 +1,6 @@
 const express = require('express');
 const dotenv = require('dotenv');
+const { getPlaylists } = require('./spotify');
 
 dotenv.config();
 
