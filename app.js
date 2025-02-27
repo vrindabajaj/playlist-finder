@@ -6,8 +6,10 @@ dotenv.config();
 
 const app = express();
 
-app.get('/', (req, res) => {
-    res.send('Hello, world! The server is working.');
+app.get('/search', async (req, res) => {
+    const song = req.query.song;
+    const playlists = await getPlaylists(song);
+    res.json(playlists);
 });
 
 const PORT = process.env.PORT || 5000;
