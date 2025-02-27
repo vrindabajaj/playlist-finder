@@ -15,6 +15,8 @@ const getAccessToken = async () => {
             'Authorization': `Basic ${auth}`,
             'Content-Type': 'application/x-www-form-urlencoded',
         },
+    }).catch(error => {
+        console.log("Error:", error.response ? error.response.data : error.message);
     });
     return response.data.access_token;
 };
@@ -35,4 +37,4 @@ const getPlaylists = async (song) => {
     return response.data.playlists.items;
 };
 
-module.exports = { getPlaylists };
+module.exports = { getPlaylists, getAccessToken };

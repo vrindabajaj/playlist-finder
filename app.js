@@ -1,9 +1,8 @@
 const express = require('express');
 const dotenv = require('dotenv');
-const { getPlaylists } = require('./spotify');
-
 dotenv.config();
 
+const { getPlaylists } = require('./spotify');
 const app = express();
 
 app.get('/search', async (req, res) => {
