@@ -33,6 +33,8 @@ const getPlaylists = async (song) => {
         headers: {
         'Authorization': `Bearer ${token}`,
         },
+    }).catch (error => {
+        console.error('Error fetching playlists:', error);
     });
     return response.data.playlists.items;
 };
