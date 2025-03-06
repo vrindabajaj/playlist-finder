@@ -2,7 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 dotenv.config();
 
-const { getPlaylists } = require('./spotify');
+const { getPlaylists, getAccessToken } = require('./spotify');
 const app = express();
 
 app.get('/search', async (req, res) => {
@@ -13,10 +13,11 @@ app.get('/search', async (req, res) => {
         return res.status(400).json({ error: 'Missing "songs" query parameter' });
     }
     // Ensure it's a string before calling split
-    const songs = typeof songsQuery === 'string' ? songsQuery.split(',') : [];
+    const songs = typeof songsQuery === 'string' ? songsQuery.split(',').map(song => song.trim()) : [];
 
     try {
-        const playlists = await getPlaylists(songs);
+        const accessToken = await getAccessToken(); // Get a fresh access token
+        const playlists = await getPlaylists(songs, accessToken); // Pass token into function
         res.json(playlists);
     } catch (error) {
         console.error('Error fetching playlists:', error.message);
