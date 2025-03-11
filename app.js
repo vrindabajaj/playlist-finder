@@ -2,7 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 dotenv.config();
 
-const { getPlaylists, getAccessToken } = require('./spotify');
+const { getPlaylistsForSongs, getAccessToken } = require('./spotify');
 const app = express();
 
 app.get('/search', async (req, res) => {
@@ -16,8 +16,15 @@ app.get('/search', async (req, res) => {
     const songs = typeof songsQuery === 'string' ? songsQuery.split(',').map(song => song.trim()) : [];
 
     try {
+        console.log("Fetching access token...");
         const accessToken = await getAccessToken(); // Get a fresh access token
-        const playlists = await getPlaylists(songs, accessToken); // Pass token into function
+        console.log("Access token received:", accessToken ? "Valid token" : "Failed to get token");
+        console.log(accessToken);
+
+        console.log("Fetching playlists for songs:", songs);
+        const playlists = await getPlaylistsForSongs(songs, accessToken); // Pass token into function
+        console.log("Playlists found:", playlists.length, "playlists");
+
         res.json(playlists);
     } catch (error) {
         console.error('Error fetching playlists:', error.message);

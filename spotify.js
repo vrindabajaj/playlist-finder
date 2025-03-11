@@ -22,76 +22,112 @@ const getAccessToken = async () => {
     return response.data.access_token;
 };
 
-// API Request
-const fetchPlaylists = async (songs, token) => {
-    const query = songs.map(song => `"${song}"`).join(' OR '); // Formats it correctly for Spotify
-    const url = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=playlist`;
-
-    console.log('Songs being searched:', songs);
-
+const getTrackId = async (song, token) => {
     try {
+        const url = `https://api.spotify.com/v1/search?q=${encodeURIComponent(song)}&type=track&limit=1`;
         const response = await axios.get(url, {
-            params: { q: songs, type: 'playlist', limit: 50 },
-            headers: { Authorization: `Bearer ${token}`},
-        })
+            headers: { Authorization: `Bearer ${token}` }
+        });
 
-        if (!response.data.playlists || !response.data.playlists.items) {
-            throw new Error('No playlists found in response');
+        const tracks = response.data.tracks.items;
+        if (!tracks.length) {
+            console.warn(`No track found for: ${song}`);
+            return null;
         }
 
-        return response.data.playlists.items.filter(p => p && p.id); // Remove null playlists
-
-        } catch (error) {
-            console.error('Error fetching playlists:', error.response ? error.response.data : error.message);
-            return [];
-        }
+        return tracks[0].id;
+    } catch (error) {
+        console.error('Error fetching track ID:', error.message);
+        return null;
+    }
 };
 
-const filterPlaylistsByTracks = async (playlists, songs, token) => {
+const getPlaylistsContainingTrack = async (trackId, token) => {
     try {
-        const playlistMatches = await Promise.all(playlists.map(async (playlist) => {
+        console.log(`Searching for playlists that contain track ID: ${trackId}`);
+        const playlistsUrl = `https://api.spotify.com/v1/browse/featured-playlists?limit=10`;
+        const playlistsResponse = await axios.get(playlistsUrl, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!playlistsResponse.data.playlists || !playlistsResponse.data.playlists.items) {
+            console.warn(`No playlists found for track ID: ${trackId}`);
+            return [];
+        }
+
+        const playlists = playlistsResponse.data.playlists.items;
+
+        console.log(`Found ${playlists.length} public playlists. Checking their tracks...`);
+
+        const matchingPlaylists = [];
+
+        // Check each playlist's tracks
+        for (const playlist of playlists) {
+            console.log(`Fetching tracks for playlist: ${playlist.id} - ${playlist.name}`);
+
             try {
-                const trackResponse = await axios.get(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
-                    headers: { Authorization: `Bearer ${token}`},
+                const tracksUrl = `https://api.spotify.com/v1/playlists/${playlist.id}/tracks`;
+                const tracksResponse = await axios.get(tracksUrl, {
+                    headers: { Authorization: `Bearer ${token}` }
                 });
 
-                // Extract track names
-                const trackNames = trackResponse.data.items.map(item => item.track.name.toLowerCase());
-                console.log(`Tracks in playlist ${playlist.name}:`, trackNames);
+                const trackIdsInPlaylist = tracksResponse.data.items.map(item => item.track.id);
 
-                // Count matches
-                const matchCount = songs.filter(song => {
-                    console.log(`Checking if '${song.toLowerCase()}' exists in:`, trackNames);
-                    return trackNames.some(track => track.includes(song.toLowerCase()))
-                }).length;
-
-                return { 
-                    name: playlist.name,
-                    url: playlist.external_urls.spotify,
-                    matchCount: matchCount 
-                };
+                if (trackIdsInPlaylist.includes(trackId)) {
+                    console.log(`Match found in: ${playlist.name}`);
+                    matchingPlaylists.push({
+                        id: playlist.id,
+                        name: playlist.name,
+                        url: playlist.external_urls.spotify
+                    });
+                }
             } catch (trackError) {
-                console.error('Error fetching tracks:', trackError.message);
-                return null; // Skip failed playlists
+                console.error(`Failed to fetch tracks for playlist ${playlist.id}:`, trackError.message);
             }
-        }));
-        console.log('All retrieved playlists:', playlistMatches);
+        }
 
-        // Remove null results, sort by match count, and filter out 0-match playlists
-        return playlistMatches
-            .filter(p => p && p.matchCount > 0)
-            .sort((a, b) => b.matchCount - a.matchCount);
-        // return playlistMatches.filter(p => p).sort((a, b) => b.matchCount - a.matchCount);
-
+        console.log(`Playlists that contain the track:`, matchingPlaylists);
+        return matchingPlaylists;
     } catch (error) {
-        console.error('Error filtering playlists:', error.message);
+        console.error(`Error fetching playlists:`, error.message);
         return [];
     }
 };
 
-const getPlaylists = async (songs, token) => {
-    const playlists = await fetchPlaylists(songs, token);
-    return await filterPlaylistsByTracks(playlists, songs, token);
+const getPlaylistsForSongs = async (songs, token) => {
+    try {
+        // Convert all song names into Spotify track IDs
+        const trackIds = await Promise.all(songs.map(song => getTrackId(song, token)));
+        console.log(`Track ID for "${songs}":`, trackIds);
+        const validTrackIds = trackIds.filter(id => id !== null); // Remove failed lookups
+
+        if (validTrackIds.length === 0) {
+            console.warn(`No valid track IDs found, returning empty result.`);
+            return [];
+        }
+
+        // Fetch playlists for each track ID
+        const allPlaylists = [];
+        for (const trackId of validTrackIds) {
+            const playlistsForTrack = await getPlaylistsContainingTrack(trackId, token);
+            allPlaylists.push(...playlistsForTrack);
+        }
+
+        // Remove duplicate playlists and count matches
+        const uniquePlaylists = {};
+        allPlaylists.flat().forEach(playlist => {
+            if (!uniquePlaylists[playlist.id]) {
+                uniquePlaylists[playlist.id] = { ...playlist, matchCount: 0 };
+            }
+            uniquePlaylists[playlist.id].matchCount++;
+        });
+
+        // Convert to array, sort by match count, and return
+        return Object.values(uniquePlaylists).sort((a, b) => b.matchCount - a.matchCount);
+    } catch (error) {
+        console.error('Error in getPlaylistsForSongs:', error.message);
+        return [];
+    }
 };
 
-module.exports = { getPlaylists, getAccessToken };
+module.exports = { getPlaylistsForSongs, getAccessToken };
